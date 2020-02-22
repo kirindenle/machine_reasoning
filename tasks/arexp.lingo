@@ -1,0 +1,5 @@
+exp = add | mult | int;
+add = ' '* "(" exp:e1 "+" exp:e2 ")" ' '* { ArSum(:e1, :e2) };
+mult = ' '* "(" exp:e1 "*" exp:e2 ")" ' '* { ArMult(:e1, :e2) };
+int = ' '* digit+$d ' '* { ArInt(s2i($d)) };
+digit = '0'-'9';

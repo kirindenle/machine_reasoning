@@ -1,0 +1,16 @@
+import string;
+import lingo/pegcode/driver;
+
+grammar = compilePegGrammar("#include arexp.lingo");
+
+ArInt : (id : int);
+ArSum : (lhs : ArExp, rhs : ArExp);
+ArMult : (lhs : ArExp, rhs : ArExp);
+ArExp ::= ArInt, ArSum, ArMult;
+
+main() {
+    v : ArExp = ArInt(10);
+    println(v);
+    s = "      ( ( 1 + 2 )    *     3 )   ";
+    println(parsic(grammar, s, defaultPegActions));
+}

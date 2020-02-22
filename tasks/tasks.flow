@@ -1,0 +1,62 @@
+import runtime;
+import string;
+/*
+Write a function, which transforms an array integers into the array of strings, e.g: [1, 2, 3] to ["1", "2", "3"].
+Print this array. Use functions: map, i2s, strGlue, println.
+*/
+showArray : ([int]) -> [string];
+showArray(a) {
+    map(a, i2s);
+}
+
+sum : (int, int) -> int;
+sum(x, y) {
+    x + y;
+}
+
+sumArray : ([int]) -> int;
+sumArray(a) {
+    fold(a, 0, sum);
+}
+
+fib1 : (int) -> [int];
+fib1(n) {
+    if (n == 0) {
+        [];
+    } else if (n == 1) {
+        [0];
+    } else if (n == 2) {
+        [0, 1];
+    } else {
+        rec : [int] = fib1(n-1);
+        concat (rec, [rec[n-2] + rec [n-3]]);
+    }
+}
+
+
+fib2 : (int) -> [int];
+fib2(n) {
+    if (n == 0) {
+        [];
+    } else if (n == 1) {
+        [0];
+    } else if (n == 2) {
+        [0, 1];
+    } else {
+        rec : ref [int] = ref fib2(n-1);
+        refArrayPush(rec, ^rec[n-2] + ^rec[n-3]);
+        ^rec;
+    }
+}
+
+main() {
+    a = [1,2,3];
+    println(a);
+    println(showArray(a));
+    println(strGlue(map(a, i2s), ", "));
+    println(sumArray(a));
+    n = 30;
+    println(n);
+    println(fib1(n));
+    println(fib2(n));
+}
