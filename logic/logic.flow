@@ -1,0 +1,193 @@
+import string;
+import ds/bitvector;
+import ds/tuples;
+import ds/tree;
+import math/uint64;
+import lingo/pegcode/driver;
+
+grammar = compilePegGrammar("#include logic.lingo");
+
+FType ::= AlwaysTrue, AlwaysFalse, Usual;
+    AlwaysTrue();
+    AlwaysFalse();
+    Usual();
+
+hLVar : (id : int);
+hLOr : (lhs : hLExp, rhs : hLExp);
+hLAnd : (lhs : hLExp, rhs : hLExp);
+hLNot : (exp : hLExp);
+hLExp ::= hLVar, hLOr, hLAnd, hLNot;
+
+LVar : (id : string);
+LOr : (lhs : LExp, rhs : LExp);
+LAnd : (lhs : LExp, rhs : LExp);
+LNot : (exp : LExp);
+LExp ::= LVar, LOr, LAnd, LNot;
+
+vars(t: Tree<string, int>, m: int, e : LExp) -> Pair<Tree<string, int>, int> {
+    switch(e : LExp) {
+    LVar(s): {
+        switch(lookupTree(t, s) : Maybe<int>) {
+            Some(n): Pair(t, m);
+            None(): Pair(setTree(t, s, m+1), m+1);
+        }
+    }
+    LAnd(l, r): {
+        p = vars(t, m, l);
+        vars(p.first, p.second, r);
+    }
+    LOr(l, r): {
+        p = vars(t, m, l);
+        vars(p.first, p.second, r);
+    }
+    LNot (e_): {
+        vars(t, m, e_);
+    }
+    }
+}
+
+convert(v: Tree<string, int>, e: LExp) -> hLExp {
+    switch(e : LExp){
+        // Если дерево корректное, то никогда не присвоит -1.
+        LVar(s): hLVar(lookupTreeDef(v, s, -1));
+        LAnd(l, r): hLAnd(convert(v, l), convert(v, r));
+        LOr(l,r): hLOr(convert(v, l), convert(v, r));
+        LNot (ee): hLNot(convert(v, ee));
+    }
+}
+
+l_to_hl(e : LExp) -> Pair<hLExp, int> {
+    // Паттерн матчинг для пар?
+    v = vars(makeTree(), -1, e);
+    Pair(convert(v.first, e), v.second);
+}
+
+findFirstNotFull(s: BitVector) -> Maybe<int> {
+    foldi(s.data, None(), \i, pred, x -> switch(pred) {
+        None():
+            if (x==-1 // либо ячейка заполнена
+                || (i*32 == s.bitcount - s.bitcount % 32 // если это последняя ячейка
+                    && x+1 >= pot2(s.bitcount - i*32))) // то x+1 не должно вылезти за bitcount в этой ячейке
+                None() 
+            else 
+                Some(i);
+        Some(_):
+            pred; 
+    });
+}
+
+succ(s: BitVector) -> Maybe<BitVector> {
+    // TODO: Объединить с findFirstNotFull чтобы два раза не проходиться
+    switch(findFirstNotFull(s)) {
+        None(): None();
+        // TODO: Как не реконструировать BitVector и делать replace без копирования?
+        Some(i): Some(BitVector(replace(s.data, i, s.data[i] + 1), s.bitcount));
+    }
+}
+
+// Сделать, чтобы calc возвращал не Maybe
+calc(s: BitVector, e: hLExp) -> Maybe<bool> {
+    switch(e) {
+        hLVar(id): {
+            // Аппликативные функторы в flow?
+            switch(getBitVector(s, id)) {
+                Some(b): Some(b);
+                None(): None();
+            }
+        }
+        hLOr(lhs, rhs): {
+            // Аппликативные функторы в flow?
+            switch(calc(s, lhs)) {
+                Some(b): 
+                    if (b) {
+                        Some(true);
+                    } else {
+                        calc(s, rhs);
+                    }
+                None(): None();
+            }
+        }
+        hLAnd(lhs, rhs): {
+            // Аппликативные функторы в flow?
+            switch(calc(s, lhs)) {
+                Some(b): 
+                    if (b) {
+                        calc(s, rhs);
+                    } else {
+                        Some(false);
+                    }
+                None(): None();
+            }
+        }
+        hLNot(e_): {
+            // Аппликативные функторы в flow?
+            switch(calc(s, e_)) {
+                Some(b): Some(!b);
+                None(): None();
+            }
+        }
+    }
+}
+
+
+brutHelper(s: BitVector, e: hLExp, t: Maybe<FType>) -> FType {
+    switch (calc(s, e)) {
+        Some(b): {
+            if(b) {
+                switch(t) {
+                    None(): 
+                        switch(succ(s)) {
+                            Some(spp): brutHelper(spp, e, Some(AlwaysTrue()));
+                            None(): AlwaysTrue();
+                        }
+                    Some(x): 
+                        if (x == AlwaysTrue()) {
+                            switch(succ(s)) {
+                                Some(spp): brutHelper(spp, e, Some(AlwaysTrue()));
+                                None(): AlwaysTrue();
+                            }
+                        }
+                        // t никогда не Some(Usual()) в этой функции.
+                        else {
+                            Usual();
+                        }
+                }
+            } else {
+                switch(t) {
+                    None(): 
+                        switch(succ(s)) {
+                            Some(spp): brutHelper(spp, e, Some(AlwaysFalse()));
+                            None(): AlwaysFalse();
+                        }
+                    Some(x): 
+                        if (x == AlwaysTrue()) {
+                            Usual();
+                        }
+                        // t никогда не Some(Usual()) в этой функции.
+                        else {
+                            switch(succ(s)) {
+                                Some(spp): brutHelper(spp, e, Some(AlwaysFalse()));
+                                None(): AlwaysFalse();
+                            }
+                        }
+                }
+            }
+        }
+        // Если передать в calc правильного размера BitVector, то это никогда не выполняется
+        None(): Usual();
+    }
+}
+
+brutforce(e: LExp) -> FType {
+    p = l_to_hl(e);
+    he = p.first;
+    count = p.second + 1;
+    s = makeEmptyBitVector(count);
+    brutHelper(s, he, None());
+}
+
+main() {
+    s = "((((a && b) && c) && d) -> (a && d))";
+    e = parsic(grammar, s, defaultPegActions);
+    println(brutforce(e));
+}

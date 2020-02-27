@@ -1,0 +1,8 @@
+exp = and | or | var | arr | not;
+and = ' '* "(" exp:e1 "&&" exp:e2 ")" ' '* { LAnd(:e1, :e2) };
+or = ' '* "(" exp:e1 "||" exp:e2 ")" ' '* { LOr(:e1, :e2) };
+arr = ' '* "(" exp:e1 "->" exp:e2 ")" ' '* { LOr(LNot(:e1), :e2) };
+not = ' '* "!" exp:e1 ' '* { LNot(:e1) };
+var = ' '* symb$s ' '* { LVar($s) };
+symb = ('a'-'z')+ digit*;
+digit = '0'-'9';
