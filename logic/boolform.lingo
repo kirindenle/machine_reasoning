@@ -1,0 +1,10 @@
+exp = and | or | arr | not | true | false | var;
+and = ' '* "(" exp:e1 "&&" exp:e2 ")" ' '* { BoolAnd(:e1, :e2) };
+or = ' '* "(" exp:e1 "||" exp:e2 ")" ' '* { BoolOr(:e1, :e2) };
+arr = ' '* "(" exp:e1 "->" exp:e2 ")" ' '* { BoolOr(BoolNot(:e1), :e2) };
+not = ' '* "!" exp:e1 ' '* { BoolNot(:e1) };
+true = ' '* "T" ' '* {BoolTrue()};
+false = ' '* "F" ' '* {BoolFalse()};
+var = ' '* symb$s ' '* { BoolVar($s) };
+symb = ('a'-'z')+ digit*;
+digit = '0'-'9';

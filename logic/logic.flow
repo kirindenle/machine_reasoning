@@ -12,11 +12,11 @@ FType ::= AlwaysTrue, AlwaysFalse, Usual;
     AlwaysFalse();
     Usual();
 
-hLVar : (id : int);
-hLOr : (lhs : hLExp, rhs : hLExp);
-hLAnd : (lhs : hLExp, rhs : hLExp);
-hLNot : (exp : hLExp);
 hLExp ::= hLVar, hLOr, hLAnd, hLNot;
+    hLVar : (id : int);
+    hLOr : (lhs : hLExp, rhs : hLExp);
+    hLAnd : (lhs : hLExp, rhs : hLExp);
+    hLNot : (exp : hLExp);
 
 LVar : (id : string);
 LOr : (lhs : LExp, rhs : LExp);

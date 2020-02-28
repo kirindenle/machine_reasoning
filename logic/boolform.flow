@@ -1,0 +1,131 @@
+import string;
+import ds/tuples;
+import ds/tree;
+import ds/cart_prod;
+import ds/array;
+import lingo/pegcode/driver;
+
+grammar = compilePegGrammar("#include boolform.lingo");
+grammar_int = compilePegGrammar("#include boolform_int.lingo");
+
+FType ::= AlwaysTrue, AlwaysFalse, Usual;
+    AlwaysTrue();
+    AlwaysFalse();
+    Usual();
+
+BoolForm<?> ::= BoolAnd<?>, BoolOr<?>, BoolNot<?>, BoolTrue, BoolFalse, BoolVar<?>;
+    BoolAnd(lhs : BoolForm<?>, rhs : BoolForm<?>);
+    BoolOr(lhs : BoolForm<?>, rhs : BoolForm<?>);
+    BoolNot(f : BoolForm<?>);
+    BoolTrue();
+    BoolFalse();
+    BoolVar(id : ?);
+
+vars(t: Tree<string, int>, m: int, e : BoolForm<string>) -> Pair<Tree<string, int>, int> {
+    switch(e) {
+        BoolVar(s): {
+            switch(lookupTree(t, s) : Maybe<int>) {
+                Some(n): Pair(t, m);
+                None(): Pair(setTree(t, s, m+1), m+1);
+            }
+        }
+        BoolAnd(l, r): {
+            p = vars(t, m, l);
+            vars(p.first, p.second, r);
+        }
+        BoolOr(l, r): {
+            p = vars(t, m, l);
+            vars(p.first, p.second, r);
+        }
+        BoolNot (e_): {
+            vars(t, m, e_);
+        }
+        BoolTrue(): Pair(t, m);
+        BoolFalse(): Pair(t, m);
+    }
+}
+
+
+convert(v: Tree<string, int>, e: BoolForm<string>) -> BoolForm<int> {
+    switch(e){
+        // Если дерево корректное, то никогда не присвоит -1.
+        BoolAnd(l, r): BoolAnd(convert(v, l), convert(v, r));
+        BoolOr(l,r): BoolOr(convert(v, l), convert(v, r));
+        BoolNot(ee): BoolNot(convert(v, ee));
+        BoolTrue(): BoolTrue();
+        BoolFalse(): BoolFalse();
+        BoolVar(s): BoolVar(lookupTreeDef(v, s, -1));
+    }
+}
+
+BoolStr_to_BoolInt(e : BoolForm<string>) -> Pair<BoolForm<int>, int> {
+    // Паттерн матчинг для пар?
+    v = vars(makeTree(), -1, e);
+    Pair(convert(v.first, e), v.second);
+}
+
+calc(it: [int], e: BoolForm<int>) -> bool {
+    switch(e) {
+        BoolVar(id):
+            if (it[id] == 0) false else true;
+        BoolOr(lhs, rhs):
+            calc(it, lhs) || calc(it, rhs);
+        BoolAnd(lhs, rhs):
+            calc(it, lhs) && calc(it, rhs);
+        BoolNot(e_): 
+            !calc(it, e_);
+        BoolTrue(): true;
+        BoolFalse(): false;
+    }
+}
+
+brutHelper(it: [int], card: CartProd, e: BoolForm<int>, t: Maybe<bool>) -> FType {
+    if (calc(it, e)) switch(t) {
+        None(): 
+            switch(nextCartProd(it, card)) {
+                Some(itnext): brutHelper(itnext, card, e, Some(true));
+                None(): AlwaysTrue();
+            }
+        Some(b):
+            if (b) switch(nextCartProd(it, card)) {
+                    Some(itnext): brutHelper(itnext, card, e, Some(true));
+                    None(): AlwaysTrue();
+            } else Usual();
+    } else switch(t) {
+        None(): 
+            switch(nextCartProd(it, card)) {
+                Some(itnext): brutHelper(itnext, card, e, Some(false));
+                None(): AlwaysFalse();
+            }
+        Some(b): 
+            if (b) Usual() else switch(nextCartProd(it, card)) {
+                Some(itnext): brutHelper(itnext, card, e, Some(false));
+                None(): AlwaysFalse();
+            }
+    }
+}
+
+brutforce(e: BoolForm<string>) -> FType {
+    p = BoolStr_to_BoolInt(e);
+    he = p.first;
+    count = p.second + 1;
+    card = CartProd(map(enumFromTo(0, count - 1), \i -> [false, true]));
+    brutHelper(initCartProd(card), card, he, None());
+}
+
+brutforce_int(e: BoolForm<int>, max_id: int) -> FType {
+    count = max_id + 1;
+    card = CartProd(map(enumFromTo(0, count - 1), \i -> [false, true]));
+    brutHelper(initCartProd(card), card, e, None());
+}
+
+
+main() {
+    s = "((((a && b) && c) && d) -> (a && d))";
+    e = parsic(grammar, s, defaultPegActions);
+    println(brutforce(e));
+    s_int = "((((0 && 1) && 2) && 3) -> (0 && 3)";
+    e_int = parsic(grammar_int, s_int, defaultPegActions);
+    println(brutforce_int(e_int, 3));
+    // println(e);
+}
