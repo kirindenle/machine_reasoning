@@ -1,4 +1,5 @@
 import string;
+import ds/list;
 import ds/tuples;
 import ds/tree;
 import ds/cart_prod;
@@ -21,7 +22,7 @@ BoolForm<?> ::= BoolAnd<?>, BoolOr<?>, BoolNot<?>, BoolTrue, BoolFalse, BoolVar<
     BoolFalse();
     BoolVar(id : ?);
 
-vars(t: Tree<string, int>, m: int, e : BoolForm<string>) -> Pair<Tree<string, int>, int> {
+EnumerateVars(t: Tree<string, int>, m: int, e: BoolForm<string>) -> Pair<Tree<string, int>, int> {
     switch(e) {
         BoolVar(s): {
             switch(lookupTree(t, s) : Maybe<int>) {
@@ -30,15 +31,15 @@ vars(t: Tree<string, int>, m: int, e : BoolForm<string>) -> Pair<Tree<string, in
             }
         }
         BoolAnd(l, r): {
-            p = vars(t, m, l);
-            vars(p.first, p.second, r);
+            p = EnumerateVars(t, m, l);
+            EnumerateVars(p.first, p.second, r);
         }
         BoolOr(l, r): {
-            p = vars(t, m, l);
-            vars(p.first, p.second, r);
+            p = EnumerateVars(t, m, l);
+            EnumerateVars(p.first, p.second, r);
         }
         BoolNot (e_): {
-            vars(t, m, e_);
+            EnumerateVars(t, m, e_);
         }
         BoolTrue(): Pair(t, m);
         BoolFalse(): Pair(t, m);
@@ -60,7 +61,7 @@ convert(v: Tree<string, int>, e: BoolForm<string>) -> BoolForm<int> {
 
 BoolStr_to_BoolInt(e : BoolForm<string>) -> Pair<BoolForm<int>, int> {
     // Паттерн матчинг для пар?
-    v = vars(makeTree(), -1, e);
+    v = EnumerateVars(makeTree(), -1, e);
     Pair(convert(v.first, e), v.second);
 }
 
@@ -119,13 +120,260 @@ brutforce_int(e: BoolForm<int>, max_id: int) -> FType {
     brutHelper(initCartProd(card), card, e, None());
 }
 
+hasOppositeVars(l: Tree<string, Sign>, r: Tree<string, Sign>) {
+    foldTree(l, false, 
+                \var, val, cond -> 
+                    if (cond) {
+                        true;
+                    } else {
+                        switch (lookupTree(r, var)) {
+                            Some(s): s != val;
+                            None(): cond;
+                        }
+                    })
+}
+
+toCNF(f: BoolForm) -> [Tree<string, Sign>] {
+    switch (f) {
+        BoolAnd(lhs, rhs): {
+            concat(toCNF(lhs), toCNF(rhs));
+        }
+        BoolOr(lhs, rhs): {
+            left = toCNF(lhs);
+            right = toCNF(rhs);
+            mapConcat(left, \ltree -> 
+                fold(right, [], \acc, r -> 
+                    if (hasOppositeVars(ltree, r)) {
+                        acc;
+                    } else { 
+                        arrayPush(acc, mergeTree(ltree, r));
+                    }));
+        }
+        BoolNot(ff): {
+            switch(ff) {
+                BoolAnd(lhs, rhs):
+                    toCNF(BoolOr(BoolNot(lhs), BoolNot(rhs)));
+                BoolOr(lhs, rhs):
+                    toCNF(BoolAnd(BoolNot(lhs), BoolNot(rhs)));
+                BoolNot(fff):
+                    toCNF(fff);
+                BoolTrue():
+                    [TreeEmpty()];
+                BoolFalse():
+                    [];
+                BoolVar(x):
+                    [makeTree1(x, Neg())];
+            }
+        }
+        BoolTrue(): [];
+        BoolFalse(): [TreeEmpty()];
+        BoolVar(x): [makeTree1(x, Pos())];
+    }
+}
+
+ifSingleTreeGetKeyVal(t: Tree<?, ??>) -> Maybe<Pair<?, ??>> {
+    switch (popmax(t)) {
+        EmptyPopResult(): None();
+        PopResult(k, v, rest): switch(rest) {
+            TreeEmpty(): Some(Pair(k, v));
+            TreeNode(_k,_v,_l,_r,_d): None();
+        }
+    }
+}
+
+findAnyVar(phi: [Tree<string, Sign>]) -> Maybe<string> {
+    findmap(phi, \t -> switch(popmax(t)) {
+        PopResult(k, v, rest): Some(k);
+        EmptyPopResult() : None();
+    });
+}
+
+sign2bool(s: Sign) -> bool {
+    switch(s) {
+        Pos(): true;
+        Neg(): false;
+    }
+}
+
+bool2sign(b: bool) -> Sign {
+    if(b) Pos() else Neg();
+}
+
+drop_singles(phi: [Tree<string, Sign>]) -> Pair<[Tree<string, Sign>], Tree<string, bool>> {
+    switch(findmap(phi, ifSingleTreeGetKeyVal)) {
+        None(): Pair(phi, TreeEmpty());
+        Some(kv): {
+            key = kv.first;
+            val = kv.second;
+            new_phi = filtermap(phi, \dis -> switch(lookupTree(dis, key)) {
+                None(): Some(dis);
+                Some(s): if (s == val) None() else Some(removeFromTree(dis, key));
+            });
+            unpair(drop_singles(new_phi),
+                \new_new_phi, vars -> Pair(new_new_phi, setTree(vars, key, sign2bool(val))));
+        }
+    }
+}
+
+drop_all_same_sign(phi: [Tree<string, Sign>]) -> Pair<[Tree<string, Sign>], Tree<string, bool>> {
+    all_same_sign_vars = fold(phi, TreeEmpty(), \same_sign_vars, t -> 
+        foldTree(t, same_sign_vars, \k, v, acc -> 
+            switch(lookupTree(same_sign_vars, k)) {
+                Some(s): if(sign2bool(v) == s) {
+                    acc;
+                } else {
+                    removeFromTree(acc, k);
+                }
+                None(): setTree(acc, k, sign2bool(v));
+            }
+        )
+    );
+    if(isEmptyTree(all_same_sign_vars)) {
+        Pair(phi, TreeEmpty());
+    } else {
+        new_phi = foldTree(all_same_sign_vars, phi, \var, _, acc ->
+            filter(acc, \dis -> isNone(lookupTree(dis, var)))
+        );
+        unpair(drop_all_same_sign(new_phi), 
+            \new_new_phi, vars -> Pair(new_new_phi, mergeTree(all_same_sign_vars, vars))
+        );
+    }
+}
+
+substVar(phi: [Tree<string, Sign>], x: string, v: bool) {
+    filtermap(phi, \dis -> switch(lookupTree(dis, x)) {
+        None(): Some(dis);
+        Some(s): {
+            if (sign2bool(s) == v) {
+                None();
+            }
+            else {
+                Some(removeFromTree(dis, x));
+            }
+        } 
+    })
+}
+
+DPLLType ::= DPLLAlwaysTrue, DPLLAlwaysFalse, DPLLTrue;
+    DPLLAlwaysTrue();
+    DPLLAlwaysFalse();
+    DPLLTrue(t: Tree<string, bool>);
+
+DPLL(phi: [Tree<string, Sign>], vars: Tree<string, bool>) -> DPLLType {
+    if(phi == []) {
+        DPLLAlwaysTrue();
+    } else if (isSome(find(phi, isEmptyTree))) {
+        DPLLAlwaysFalse();
+    } else {
+        after_drop_singles = drop_singles(phi);
+        phi_after_drop_singles = after_drop_singles.first;
+        droped_single_vars = after_drop_singles.second;
+        after_drop_all_same_sign = drop_all_same_sign(phi_after_drop_singles);
+        phi_after_drops = after_drop_all_same_sign.first;
+        droped_all_same_sign_vars = after_drop_all_same_sign.second;
+        droped_vars = mergeTree(droped_single_vars, droped_all_same_sign_vars);
+        switch(findAnyVar(phi_after_drops)) {
+            None(): {
+                if(length(phi_after_drops) == 0) {
+                    if(isEmptyTree(droped_vars)) {
+                        DPLLAlwaysTrue();
+                    } else {
+                        DPLLTrue(droped_vars);
+                    }
+                } else {
+                    DPLLAlwaysFalse();
+                }
+            }
+            Some(x): {
+                droped_with_x_eq_true = setTree(droped_vars, x, true);
+                switch(DPLL(substVar(phi_after_drops, x, true), droped_with_x_eq_true)) {
+                    DPLLAlwaysTrue(): {
+                        DPLLTrue(droped_with_x_eq_true);
+                    }
+                    DPLLTrue(vs): {
+                        DPLLTrue(mergeTree(droped_with_x_eq_true, vs));
+                    }
+                    DPLLAlwaysFalse(): {
+                        droped_with_x_eq_false = setTree(droped_vars, x, false);
+                        switch(DPLL(substVar(phi_after_drops, x, false), droped_with_x_eq_false)) {
+                            DPLLAlwaysTrue(): {
+                                DPLLTrue(droped_with_x_eq_false);
+                            }
+                            DPLLTrue(vs): {
+                                DPLLTrue(mergeTree(droped_with_x_eq_false, vs));
+                            }
+                            DPLLAlwaysFalse(): DPLLAlwaysFalse();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+DPLLBool(bf: BoolForm) -> DPLLType {
+    DPLL(toCNF(bf), TreeEmpty());
+}
+
+printTree(t: Tree<string, bool>) {
+    println(list2string(
+        mapList(tree2list(t), \p -> 
+            list2string(Cons(if(p.second) "true\n" else "false\n", Cons(": ", Cons(p.first, EmptyList())))))));
+}
+
+listBF(bf : BoolForm<string>) -> List<string> {
+    switch(bf) {
+        BoolAnd(lhs, rhs):
+            Cons(")", concatList(listBF(rhs), Cons(" && ", concatList(listBF(lhs), Cons("(", EmptyList()))))); 
+        BoolOr(lhs, rhs):
+            Cons(")", concatList(listBF(rhs), Cons(" || ", concatList(listBF(lhs), Cons("(", EmptyList()))))); 
+        BoolNot(f): concatList(listBF(f), Cons("!", EmptyList())); 
+        BoolTrue(): Cons("T", EmptyList());
+        BoolFalse(): Cons("F", EmptyList());
+        BoolVar(id): Cons(id, EmptyList());
+    }
+}
+
+listBFint(bf : BoolForm<int>) -> List<string> {
+    switch(bf) {
+        BoolAnd(lhs, rhs):
+            Cons(")", concatList(listBFint(rhs), Cons(" && ", concatList(listBFint(lhs), Cons("(", EmptyList()))))); 
+        BoolOr(lhs, rhs):
+            Cons(")", concatList(listBFint(rhs), Cons(" || ", concatList(listBFint(lhs), Cons("(", EmptyList()))))); 
+        BoolNot(f): concatList(listBFint(f), Cons("!", EmptyList())); 
+        BoolTrue(): Cons("T", EmptyList());
+        BoolFalse(): Cons("F", EmptyList());
+        BoolVar(id): Cons(i2s(id), EmptyList());
+    }
+}
+
+printBF(bf : BoolForm<string>) {
+    println(list2string(listBF(bf)));
+}
+
+printBFint(bf : BoolForm<int>) {
+    println(list2string(listBFint(bf)));
+}
+
+Sign ::= Pos, Neg;
+    Pos();
+    Neg();
 
 main() {
-    s = "((((a && b) && c) && d) -> (a && d))";
+    s = "(a && ((a -> d) && d))";
     e = parsic(grammar, s, defaultPegActions);
-    println(brutforce(e));
-    s_int = "((((0 && 1) && 2) && 3) -> (0 && 3)";
-    e_int = parsic(grammar_int, s_int, defaultPegActions);
-    println(brutforce_int(e_int, 3));
-    // println(e);
+    printBF(e);
+    res = DPLLBool(e);
+    // println(toCNF(e));
+    switch(res) {
+        DPLLAlwaysFalse(): println(res);
+        DPLLAlwaysTrue(): println(res);
+        DPLLTrue(t): printTree(t);
+    }
+    // s_int = "((((0 && 1) && 2) && 3) -> (0 && 3))";
+    // e_int = parsic(grammar_int, s_int, defaultPegActions);
+    // println(brutforce_int(e_int, 3));
+
+    // (!a || !d || a) && (!a || !d || d)
+    // true
 }
