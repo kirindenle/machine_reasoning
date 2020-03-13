@@ -216,18 +216,27 @@ drop_singles(phi: [Tree<string, Sign>]) -> Pair<[Tree<string, Sign>], Tree<strin
 }
 
 drop_all_same_sign(phi: [Tree<string, Sign>]) -> Pair<[Tree<string, Sign>], Tree<string, bool>> {
-    all_same_sign_vars = fold(phi, TreeEmpty(), \same_sign_vars, t -> 
+    maybe_all_same_sign_vars = fold(phi, TreeEmpty(), \same_sign_vars, t -> {
         foldTree(t, same_sign_vars, \k, v, acc -> 
             switch(lookupTree(same_sign_vars, k)) {
-                Some(s): if(sign2bool(v) == s) {
-                    acc;
-                } else {
-                    removeFromTree(acc, k);
+                Some(ms): switch(ms) {
+                    Some(s): if(sign2bool(v) == s) {
+                        acc;
+                    } else {
+                        setTree(acc, k, None());
+                    }
+                    None(): acc;
                 }
-                None(): setTree(acc, k, sign2bool(v));
+                None(): setTree(acc, k, Some(sign2bool(v)));
             }
         )
+        }
     );
+    all_same_sign_vars = foldTree(maybe_all_same_sign_vars, TreeEmpty(), 
+        \k, v, acc -> switch(v) {
+            None(): acc;
+            Some(b): setTree(acc, k, b);
+        } );
     if(isEmptyTree(all_same_sign_vars)) {
         Pair(phi, TreeEmpty());
     } else {
@@ -268,9 +277,11 @@ DPLL(phi: [Tree<string, Sign>], vars: Tree<string, bool>) -> DPLLType {
         after_drop_singles = drop_singles(phi);
         phi_after_drop_singles = after_drop_singles.first;
         droped_single_vars = after_drop_singles.second;
+
         after_drop_all_same_sign = drop_all_same_sign(phi_after_drop_singles);
         phi_after_drops = after_drop_all_same_sign.first;
         droped_all_same_sign_vars = after_drop_all_same_sign.second;
+
         droped_vars = mergeTree(droped_single_vars, droped_all_same_sign_vars);
         switch(findAnyVar(phi_after_drops)) {
             None(): {
@@ -321,6 +332,12 @@ printTree(t: Tree<string, bool>) {
             list2string(Cons(if(p.second) "true\n" else "false\n", Cons(": ", Cons(p.first, EmptyList())))))));
 }
 
+printTreeSign(t: Tree<string, Sign>) {
+    println(list2string(
+        mapList(tree2list(t), \p -> 
+            list2string(Cons(if(sign2bool(p.second)) "pos\n" else "neg\n", Cons(": ", Cons(p.first, EmptyList())))))));
+}
+
 listBF(bf : BoolForm<string>) -> List<string> {
     switch(bf) {
         BoolAnd(lhs, rhs):
@@ -360,11 +377,11 @@ Sign ::= Pos, Neg;
     Neg();
 
 main() {
-    s = "(a && ((a -> d) && d))";
+    s = "#include updated_big_formula";
     e = parsic(grammar, s, defaultPegActions);
-    printBF(e);
+    // printBF(e);
+    // map(toCNF(e), printTreeSign);
     res = DPLLBool(e);
-    // println(toCNF(e));
     switch(res) {
         DPLLAlwaysFalse(): println(res);
         DPLLAlwaysTrue(): println(res);
