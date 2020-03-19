@@ -1,0 +1,27 @@
+import string;
+import ds/list;
+import ds/array;
+import lingo/pegcode/driver;
+
+grammar = compilePegGrammar("#include my_array_parser.lingo");
+
+PredTerm ::= PredVar, PredFunc;
+    PredVar(x: string);
+    PredFunc(name: string, args: List<PredTerm>);
+
+Form ::= FormAtom, FormAll, FormEx, FormAnd, FormOr, FormNot;
+    FormAtom(name: string, args: List<PredTerm>);
+    FormAll(var: string, p: Form);
+    FormEx(var: string, p: Form);
+    FormAnd(lhs: Form, rhs: Form);
+    FormOr(lhs: Form, rhs: Form);
+    FormNot(p: Form);
+
+main() {
+    s = "Ax Ay Ez (less(x, y) -> more(y, x))";
+    s2 = "Ay P(y)";
+    e = parsic(grammar, s, defaultPegActions);
+    println(e);
+    e2 = parsic(grammar, s2, defaultPegActions);
+    println(e2);
+}

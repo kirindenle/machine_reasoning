@@ -1,0 +1,21 @@
+form = pred | and | or | not | arr | all | ex;
+
+and = "(" form:lhs "&" form:rhs ")" { FormAnd(:lhs, :rhs) };
+or = "(" form:lhs "|" form:rhs ")" { FormOr(:lhs, :rhs) };
+not = "!" form:f { FormNot(:f) };
+arr = "(" form:from "->" form:to ")" { FormOr(FormNot(:from), :to) };
+
+all = "A" ' '* symb$x ' ' form:f { FormAll($x, :f) };
+ex = "E" ' '* symb$x ' ' form:f { FormAll($x, :f) };
+
+pred = ' '* symb$p ' '* args:as ' '* { FormAtom($p, :as) };
+args = "(" ' '* term:t ' '* rest:r { Cons(:t, :r) };
+
+term = var | func;
+var = symb$x ' '* { PredVar($x) };
+func = symb$f ' '* args:as { PredFunc($f, :as) };
+
+rest = end | cont;
+end = ")" ' '* { EmptyList() };
+cont = "," ' '* term:t ' '* rest:r ' '* { Cons(:t, :r) };
+symb = ('a'-'z' | 'A'-'Z')+;
