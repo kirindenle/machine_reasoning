@@ -25,12 +25,8 @@ NNF ::= NNFLiteral, NNFAll, NNFEx, NNFAnd, NNFOr;
     NNFAnd(lhs: NNF, rhs: NNF);
     NNFOr(lhs: NNF, rhs: NNF);
 
-/*
+
 toNNF(phi: Form) -> NNF {
-    predlist2predarray = \args -> reverseA(list2array(mapList(args, \p -> switch(p) {
-        PredFuncList(f, as): PredFunc(f, reverseA(list2array(as)));
-        PredVarList(x): PredVar(x);
-    })));
     switch(phi) {
         FormNot(psi): {
             switch(psi) {
@@ -38,7 +34,7 @@ toNNF(phi: Form) -> NNF {
                     toNNF(p);
                 }
                 FormAtom(name, args): {
-                    NNFLiteral(false, name, predlist2predarray(args));
+                    NNFLiteral(false, name, args);
                 }
                 FormAll(var, p): {
                     NNFEx(var, toNNF(FormNot(p)));
@@ -55,7 +51,7 @@ toNNF(phi: Form) -> NNF {
             }
         }
         FormAtom(name, args): {
-            NNFLiteral(true, name, predlist2predarray(args));
+            NNFLiteral(true, name, args);
         }
         FormAll(var, p): {
             NNFAll(var, toNNF(p));
@@ -71,7 +67,7 @@ toNNF(phi: Form) -> NNF {
         }
     }
 }
-*/
+
 
 
 PredTerm2string(t: PredTerm) -> string {
