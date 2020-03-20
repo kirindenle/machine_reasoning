@@ -8,14 +8,10 @@ arr = "(" form:from "->" form:to ")" { FormOr(FormNot(:from), :to) };
 all = ' '* "A" ' '* symb$x ' ' form:f ' '* { FormAll($x, :f) };
 ex = ' '* "E" ' '* symb$x ' ' form:f ' '* { FormEx($x, :f) };
 
-pred = ' '* symb$p ' '* args:as ' '* { FormAtom($p, :as) };
-args = "(" ' '* term:t ' '* rest:r { Cons(:t, :r) };
+pred = ' '* symb$p ' '* "(" term*:as ")" ' '* { FormAtom($p, :as) };
 
 term = var | func;
-var = symb$x ' '* { PredVarList($x) };
-func = symb$f ' '* args:as { PredFuncList($f, :as) };
+var = symb$x ' '* ","? ' '* { PredVar($x) };
+func = symb$f ' '* "(" term*:as ")" ' '* ","? ' '* { PredFunc($f, :as) };
 
-rest = end | cont;
-end = ")" { EmptyList() };
-cont = "," ' '* term:t ' '* rest:r ' '* { Cons(:t, :r) };
 symb = ('a'-'z' | 'A'-'Z')+;

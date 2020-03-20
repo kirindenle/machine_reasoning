@@ -5,21 +5,18 @@ import lingo/pegcode/driver;
 
 grammar = compilePegGrammar("#include predicates.lingo");
 
-PredTermList ::= PredVarList, PredFuncList;
-    PredVarList(x: string);
-    PredFuncList(name: string, args: List<PredTerm>);
+PredTerm ::= PredVar, PredFunc;
+    PredVar(x: string);
+    PredFunc(name: string, args: [PredTerm]);
 
 Form ::= FormAtom, FormAll, FormEx, FormAnd, FormOr, FormNot;
-    FormAtom(name: string, args: List<PredTermList>);
+    FormAtom(name: string, args: [PredTerm]);
     FormAll(var: string, p: Form);
     FormEx(var: string, p: Form);
     FormAnd(lhs: Form, rhs: Form);
     FormOr(lhs: Form, rhs: Form);
     FormNot(p: Form);
 
-PredTerm ::= PredVar, PredFunc;
-    PredVar(x: string);
-    PredFunc(name: string, args: [PredTerm]);
 
 NNF ::= NNFLiteral, NNFAll, NNFEx, NNFAnd, NNFOr;
     NNFLiteral(sign: bool, name: string, args: [PredTerm]);
@@ -28,6 +25,7 @@ NNF ::= NNFLiteral, NNFAll, NNFEx, NNFAnd, NNFOr;
     NNFAnd(lhs: NNF, rhs: NNF);
     NNFOr(lhs: NNF, rhs: NNF);
 
+/*
 toNNF(phi: Form) -> NNF {
     predlist2predarray = \args -> reverseA(list2array(mapList(args, \p -> switch(p) {
         PredFuncList(f, as): PredFunc(f, reverseA(list2array(as)));
@@ -73,14 +71,32 @@ toNNF(phi: Form) -> NNF {
         }
     }
 }
+*/
+/*
+
+standartizeNNF_helper(psi: NNF, renamings: ref Tree<string, string>) -> NNF {
+    switch(psi) {
+        NNFLiteral(s, n, as): NNFLiteral(!s, n, as);
+        NNFAll(x, p): NNFAll(x, standartizeNNF_helper(p, renamings));
+        NNFEx(x, p): NNFEx(x, standartizeNNF_helper(p, renamings));
+        NNFAnd(l, r): NNFAnd(standartizeNNF_helper(l, renamings), standartizeNNF_helper(r, renamings));
+        NNFOr(l, r): NNFOr(standartizeNNF_helper(l, renamings), standartizeNNF_helper(r, renamings));
+    }
+}
+
+standartizeNNF(phi: NNF) -> Pair<NNF, Tree<string, string>> {
+    renamings : ref Tree<string, string> = ref TreeEmpty();
+    Pair(standartizeNNF_helper(phi, renamings), ^renamings);
+}*/
+
 
 main() {
-    s = "Ax Ay !Ez (less(x, y) | more(y, x))";
-    s2 = "Ay P(y)";
+    s = "less(x,)";
+    s2 = "Ay P()";
     e = parsic(grammar, s, defaultPegActions);
     println(e);
     println("");
-    println(toNNF(e));
+    // println(toNNF(e));
     e2 = parsic(grammar, s2, defaultPegActions);
     println(e2);
 }
