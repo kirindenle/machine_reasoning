@@ -68,64 +68,80 @@ toNNF(phi: Form) -> NNF {
     }
 }
 
-
-
 PredTerm2string(t: PredTerm) -> string {
     switch(t) {
-        PredVar(x): 
-            x;
-        PredFunc(f, as): 
-            f + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+        PredVar(x): x;
+        PredFunc(f, as): f + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
     }
 }
 
 Form2string(phi : Form) -> string {
     switch(phi) {
-        FormAtom(p, as): {
-            p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
-        }
-        FormAll(var, p): {
-            "A" + var + " " + Form2string(p);
-        }
-        FormEx(var, p): {
-            "E" + var + " " + Form2string(p);
-        }
-        FormAnd(lhs, rhs): {
-            "(" + Form2string(lhs) + " & " + Form2string(rhs) + ")";
-        }
-        FormOr(lhs, rhs): {
-            "(" + Form2string(lhs) + " | " + Form2string(rhs) + ")";
-        }
-        FormNot(p): {
-            "!" + Form2string(p);
-        }
+        FormAtom(p, as): p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+        FormAll(var, p): "A" + var + " " + Form2string(p);
+        FormEx(var, p): "E" + var + " " + Form2string(p);
+        FormAnd(lhs, rhs): "(" + Form2string(lhs) + " & " + Form2string(rhs) + ")";
+        FormOr(lhs, rhs): "(" + Form2string(lhs) + " | " + Form2string(rhs) + ")";
+        FormNot(p): "!" + Form2string(p);
     }
 }
 
+NNF2string(phi : NNF) -> string {
+    switch(phi) {
+        NNFLiteral(s, p, as): (if (s) "" else "!") + p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+        NNFAll(var, p): "A" + var + " " + NNF2string(p);
+        NNFEx(var, p): "E" + var + " " + NNF2string(p);
+        NNFAnd(lhs, rhs): "(" + NNF2string(lhs) + " & " + NNF2string(rhs) + ")";
+        NNFOr(lhs, rhs): "(" + NNF2string(lhs) + " | " + NNF2string(rhs) + ")";
+    }
+}
 
-/*
+substPredTerm(pt: PredTerm, v: string, new_name: string) {
+    switch(pt) {
+        PredVar(x): if (x == v) PredVar(new_name) else pt;
+        PredFunc(f, as): PredFunc(f, map(as, \t -> substPredTerm(t, v, new_name)));
+    }
+}
 
-standartizeNNF_helper(psi: NNF, renamings: ref Tree<string, string>) -> NNF {
+substNNF(psi: NNF, v: string, new_name: string) {
     switch(psi) {
-        NNFLiteral(s, n, as): NNFLiteral(!s, n, as);
-        NNFAll(x, p): NNFAll(x, standartizeNNF_helper(p, renamings));
-        NNFEx(x, p): NNFEx(x, standartizeNNF_helper(p, renamings));
-        NNFAnd(l, r): NNFAnd(standartizeNNF_helper(l, renamings), standartizeNNF_helper(r, renamings));
-        NNFOr(l, r): NNFOr(standartizeNNF_helper(l, renamings), standartizeNNF_helper(r, renamings));
+        NNFLiteral(s, p, as): NNFLiteral(s, p, map(as, \t -> substPredTerm(t, v, new_name)));
+        NNFAll(x, p): if (x == v) psi else NNFAll(x, substNNF(p, v, new_name));
+        NNFEx(x, p): if (x == v) psi else NNFEx(x, substNNF(p, v, new_name));
+        NNFAnd(l, r): NNFAnd(substNNF(l, v, new_name), substNNF(r, v, new_name));
+        NNFOr(l, r): NNFOr(substNNF(l, v, new_name), substNNF(r, v, new_name));
     }
 }
 
-standartizeNNF(phi: NNF) -> Pair<NNF, Tree<string, string>> {
-    renamings : ref Tree<string, string> = ref TreeEmpty();
-    Pair(standartizeNNF_helper(phi, renamings), ^renamings);
-}*/
+var_names_helper = ref 0;
+standartizeNNF(psi: NNF) -> NNF {
+    switch(psi) {
+        NNFAll(x, p): {
+            new_name = "_x" + i2s(^var_names_helper);
+            var_names_helper := ^var_names_helper + 1;
+            NNFAll(new_name, standartizeNNF(substNNF(p, x, new_name)));
+        }
+        NNFEx(x, p): {
+            new_name = "_x" + i2s(^var_names_helper);
+            var_names_helper := ^var_names_helper + 1;
+            NNFEx(new_name, standartizeNNF(substNNF(p, x, new_name)));
+        }
+        NNFLiteral(s, n, as): psi;
+        NNFAnd(l, r): psi;
+        NNFOr(l, r): psi;
+    }
+}
+
 
 
 main() {
-    s = "Ax (less(plus(x, y), y) -> more(y, x))";
+    s = "Ax !Ey (less(plus(x, y), y) -> more(y, x))";
     s2 = "Ay P()";
     e = parsic(grammar, s, defaultPegActions);
+    estand = standartizeNNF(toNNF(e));
+    var_names_helper := 0;
     println(Form2string(e));
+    println(NNF2string(estand));
     println("");
     // println(toNNF(e));
     e2 = parsic(grammar, s2, defaultPegActions);
