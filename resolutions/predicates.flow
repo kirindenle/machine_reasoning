@@ -1,5 +1,6 @@
 import string;
 import ds/list;
+import ds/set;
 import ds/array;
 import lingo/pegcode/driver;
 
@@ -9,8 +10,9 @@ PredTerm ::= PredVar, PredFunc;
     PredVar(x: string);
     PredFunc(name: string, args: [PredTerm]);
 
-Form ::= FormAtom, FormAll, FormEx, FormAnd, FormOr, FormNot;
-    FormAtom(name: string, args: [PredTerm]);
+Atom(name: string, args: [PredTerm]);
+
+Form ::= Atom, FormAll, FormEx, FormAnd, FormOr, FormNot;
     FormAll(var: string, p: Form);
     FormEx(var: string, p: Form);
     FormAnd(lhs: Form, rhs: Form);
@@ -18,8 +20,9 @@ Form ::= FormAtom, FormAll, FormEx, FormAnd, FormOr, FormNot;
     FormNot(p: Form);
 
 
-NNF ::= NNFLiteral, NNFAll, NNFEx, NNFAnd, NNFOr;
-    NNFLiteral(sign: bool, name: string, args: [PredTerm]);
+Literal(sign: bool, p: Atom);
+
+NNF ::= Literal, NNFAll, NNFEx, NNFAnd, NNFOr;
     NNFAll(var: string, p: NNF);
     NNFEx(var: string, p: NNF);
     NNFAnd(lhs: NNF, rhs: NNF);
@@ -33,8 +36,8 @@ toNNF(phi: Form) -> NNF {
                 FormNot(p): {
                     toNNF(p);
                 }
-                FormAtom(name, args): {
-                    NNFLiteral(false, name, args);
+                Atom(name, args): {
+                    Literal(false, psi);
                 }
                 FormAll(var, p): {
                     NNFEx(var, toNNF(FormNot(p)));
@@ -50,8 +53,8 @@ toNNF(phi: Form) -> NNF {
                 }
             }
         }
-        FormAtom(name, args): {
-            NNFLiteral(true, name, args);
+        Atom(name, args): {
+            Literal(true, phi);
         }
         FormAll(var, p): {
             NNFAll(var, toNNF(p));
@@ -77,7 +80,7 @@ PredTerm2string(t: PredTerm) -> string {
 
 Form2string(phi : Form) -> string {
     switch(phi) {
-        FormAtom(p, as): p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+        Atom(p, as): p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
         FormAll(var, p): "A" + var + " " + Form2string(p);
         FormEx(var, p): "E" + var + " " + Form2string(p);
         FormAnd(lhs, rhs): "(" + Form2string(lhs) + " & " + Form2string(rhs) + ")";
@@ -86,9 +89,13 @@ Form2string(phi : Form) -> string {
     }
 }
 
+Literal2string(l: Literal) -> string {
+    (if (l.sign) "" else "!") + l.p.name + "(" + strGlue(map(l.p.args, PredTerm2string), ", ") + ")";
+}
+
 NNF2string(phi : NNF) -> string {
     switch(phi) {
-        NNFLiteral(s, p, as): (if (s) "" else "!") + p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+        Literal(s, p): Literal2string(phi);
         NNFAll(var, p): "A" + var + " " + NNF2string(p);
         NNFEx(var, p): "E" + var + " " + NNF2string(p);
         NNFAnd(lhs, rhs): "(" + NNF2string(lhs) + " & " + NNF2string(rhs) + ")";
@@ -96,16 +103,16 @@ NNF2string(phi : NNF) -> string {
     }
 }
 
-substPredTerm(pt: PredTerm, v: string, new_name: string) {
+substPredTerm(pt: PredTerm, v: string, new_term: PredTerm) {
     switch(pt) {
-        PredVar(x): if (x == v) PredVar(new_name) else pt;
-        PredFunc(f, as): PredFunc(f, map(as, \t -> substPredTerm(t, v, new_name)));
+        PredVar(x): if (x == v) new_term else pt;
+        PredFunc(f, as): PredFunc(f, map(as, \t -> substPredTerm(t, v, new_term)));
     }
 }
 
 substNNF(psi: NNF, v: string, new_name: string) {
     switch(psi) {
-        NNFLiteral(s, p, as): NNFLiteral(s, p, map(as, \t -> substPredTerm(t, v, new_name)));
+        Literal(s, p): Literal(s, Atom(p.name, map(p.args, \t -> substPredTerm(t, v, PredVar(new_name)))));
         NNFAll(x, p): if (x == v) psi else NNFAll(x, substNNF(p, v, new_name));
         NNFEx(x, p): if (x == v) psi else NNFEx(x, substNNF(p, v, new_name));
         NNFAnd(l, r): NNFAnd(substNNF(l, v, new_name), substNNF(r, v, new_name));
@@ -114,36 +121,156 @@ substNNF(psi: NNF, v: string, new_name: string) {
 }
 
 var_names_helper = ref 0;
-standartizeNNF(psi: NNF) -> NNF {
+standartizeNNFhelper(psi: NNF) -> NNF {
     switch(psi) {
         NNFAll(x, p): {
             new_name = "_x" + i2s(^var_names_helper);
             var_names_helper := ^var_names_helper + 1;
-            NNFAll(new_name, standartizeNNF(substNNF(p, x, new_name)));
+            NNFAll(new_name, standartizeNNFhelper(substNNF(p, x, new_name)));
         }
         NNFEx(x, p): {
             new_name = "_x" + i2s(^var_names_helper);
             var_names_helper := ^var_names_helper + 1;
-            NNFEx(new_name, standartizeNNF(substNNF(p, x, new_name)));
+            NNFEx(new_name, standartizeNNFhelper(substNNF(p, x, new_name)));
         }
-        NNFLiteral(s, n, as): psi;
-        NNFAnd(l, r): psi;
-        NNFOr(l, r): psi;
+        Literal(s, p): psi;
+        NNFAnd(l, r): NNFAnd(standartizeNNFhelper(l), standartizeNNFhelper(r));
+        NNFOr(l, r): NNFOr(standartizeNNFhelper(l), standartizeNNFhelper(r));
     }
 }
 
+standartizeNNF(psi: NNF) -> NNF {
+    var_names_helper := 0;
+    res = standartizeNNFhelper(psi);
+    var_names_helper := 0;
+    res;
+}
+
+Quantifier ::= All, Exists;
+    All();
+    Exists();
+
+QVar(q: Quantifier, x: string);
+
+PrenexForm(qs: [QVar], p: NonQForm);
+NonQForm ::= Literal, NonQAnd, NonQOr;
+    NonQAnd(lhs: NonQForm, rhs: NonQForm);
+    NonQOr(lhs: NonQForm, rhs: NonQForm);
+
+NonQForm2string(nqf: NonQForm) -> string {
+    switch(nqf) {
+        Literal(s, p): Literal2string(nqf);
+        NonQAnd(l, r): "(" + NonQForm2string(l) + " & " + NonQForm2string(r) + ")";
+        NonQOr(l, r): "(" + NonQForm2string(l) + " | " + NonQForm2string(r) + ")";
+    }
+}
+
+PF2string(pf : PrenexForm) -> string {
+    Qstr = strGlue(map(pf.qs, \qv -> switch(qv.q) {
+        All(): "A";
+        Exists(): "E";
+    } + qv.x), " ");
+    Qstr + " " + NonQForm2string(pf.p);
+}
+
+shiftAE(psi: NNF) -> PrenexForm {
+    switch(psi) {
+        NNFAll(x, p): {
+            pf = shiftAE(p);
+            PrenexForm(concat([QVar(All(), x)], pf.qs), pf.p);
+        }
+        NNFEx(x, p): {
+            pf = shiftAE(p);
+            PrenexForm(concat([QVar(Exists(), x)], pf.qs), pf.p);
+        }
+        NNFAnd(l, r): {
+            pfl = shiftAE(l);
+            pfr = shiftAE(r);
+            PrenexForm(concat(pfl.qs, pfr.qs), NonQAnd(pfl.p, pfr.p));
+        }
+        NNFOr(l, r): {
+            pfl = shiftAE(l);
+            pfr = shiftAE(r);
+            PrenexForm(concat(pfl.qs, pfr.qs), NonQOr(pfl.p, pfr.p));
+        }
+        Literal(s, p): PrenexForm([], psi);
+    }
+}
+
+// CNF = [Tree<Atom, bool>]
+
+
+hasCancellingLiterals(l: Tree<Atom, bool>, r: Tree<Atom, bool>) -> bool {
+    foldTree(l, false, 
+    \atom, sign_left, acc -> {
+        if (acc) true else switch (lookupTree(r, atom)) {
+            Some(sign_right): sign_right != sign_left;
+            None(): acc;
+        }
+    });
+}
+
+CNFEntry2string(dis: Tree<Atom, bool>) -> string {
+    arr = convertTreeToArray(dis, \a, s -> Literal2string(Literal(s, a)));
+    if (length(arr) == 1) {
+        arr[0];
+    } else {
+        "(" + strGlue(arr, " | ") + ")";
+    }
+}
+
+CNF2string(cnf: [Tree<Atom, bool>]) -> string {
+    strGlue(map(cnf, CNFEntry2string), " & ");
+}
+
+NonQForm2CNF(nqf: NonQForm) -> [Tree<Atom, bool>] {
+    switch(nqf) {
+        NonQAnd(lhs, rhs): {
+            concat(NonQForm2CNF(lhs), NonQForm2CNF(rhs));
+        }
+        NonQOr(lhs, rhs): {
+            left = NonQForm2CNF(lhs);
+            right = NonQForm2CNF(rhs);
+            mapConcat(left, \left_tree -> {
+                filtermap(right, \right_tree -> {
+                    if (hasCancellingLiterals(left_tree, right_tree)) {
+                        None();
+                    } else {
+                        Some(mergeTree(left_tree, right_tree));
+                    }
+                })
+            })
+        }
+        Literal(s, a): [makeTree1(a, s)];
+    }
+}
+
+PrenexNormalForm(qs: [QVar], p: [Tree<Atom, bool>]);
+
+PNF2string(pnf: PrenexNormalForm) -> string {
+    Qstr = strGlue(map(pnf.qs, \qv -> switch(qv.q) {
+        All(): "A";
+        Exists(): "E";
+    } + qv.x), " ");
+    Qstr + " " + CNF2string(pnf.p);
+}
+
+PF2PNF(pf: PrenexForm) -> PrenexNormalForm {
+    PrenexNormalForm(pf.qs, NonQForm2CNF(pf.p));
+}
+
+Form2PNF(f: Form) -> PrenexNormalForm {
+    PF2PNF(shiftAE(standartizeNNF(toNNF(f))));
+}
 
 
 main() {
-    s = "Ax !Ey (less(plus(x, y), y) -> more(y, x))";
-    s2 = "Ay P()";
+    s = "Ex (P(x) & (Ay Q(y) & R(x)))";
     e = parsic(grammar, s, defaultPegActions);
     estand = standartizeNNF(toNNF(e));
-    var_names_helper := 0;
     println(Form2string(e));
     println(NNF2string(estand));
-    println("");
+    println(PF2string(shiftAE(estand)));
+    println(PNF2string(Form2PNF(e)));
     // println(toNNF(e));
-    e2 = parsic(grammar, s2, defaultPegActions);
-    println(e2);
 }

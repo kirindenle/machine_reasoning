@@ -1,17 +1,18 @@
 form = pred | and | or | not | arr | all | ex;
 
-and = "(" form:lhs "&" form:rhs ")" { FormAnd(:lhs, :rhs) };
-or = "(" form:lhs "|" form:rhs ")" { FormOr(:lhs, :rhs) };
-not = "!" form:f { FormNot(:f) };
-arr = "(" form:from "->" form:to ")" { FormOr(FormNot(:from), :to) };
+and = ws "(" form:lhs "&" form:rhs ")" ws { FormAnd(:lhs, :rhs) };
+or = ws "(" form:lhs "|" form:rhs ")" ws { FormOr(:lhs, :rhs) };
+not = ws "!" form:f ws { FormNot(:f) };
+arr = ws "(" form:from "->" form:to ")" ws { FormOr(FormNot(:from), :to) };
 
-all = ' '* "A" ' '* symb$x ' ' form:f ' '* { FormAll($x, :f) };
-ex = ' '* "E" ' '* symb$x ' ' form:f ' '* { FormEx($x, :f) };
+all = ws "A" ws symb$x ' ' form:f ws { FormAll($x, :f) };
+ex = ws "E" ws symb$x ' ' form:f ws { FormEx($x, :f) };
 
-pred = ' '* symb$p ' '* "(" term*:as ")" ' '* { FormAtom($p, :as) };
+pred = ws symb$p ws "(" term*:as ")" ws { Atom($p, :as) };
 
 term = func | var;
-var = symb$x ' '* ","? ' '* { PredVar($x) };
-func = symb$f ' '* "(" term*:as ")" ' '* ","? ' '* { PredFunc($f, :as) };
+var = ws symb$x ws ","? ws { PredVar($x) };
+func = ws symb$f ws "(" term*:as ")" ws ","? ws { PredFunc($f, :as) };
 
 symb = ('a'-'z' | 'A'-'Z')+;
+ws = ' '*;
