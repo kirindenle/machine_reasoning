@@ -72,6 +72,41 @@ toNNF(phi: Form) -> NNF {
     }
 }
 */
+
+
+PredTerm2string(t: PredTerm) -> string {
+    switch(t) {
+        PredVar(x): 
+            x;
+        PredFunc(f, as): 
+            f + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+    }
+}
+
+Form2string(phi : Form) -> string {
+    switch(phi) {
+        FormAtom(p, as): {
+            p + "(" + strGlue(map(as, PredTerm2string), ", ") + ")";
+        }
+        FormAll(var, p): {
+            "A" + var + " " + Form2string(p);
+        }
+        FormEx(var, p): {
+            "E" + var + " " + Form2string(p);
+        }
+        FormAnd(lhs, rhs): {
+            "(" + Form2string(lhs) + " & " + Form2string(rhs) + ")";
+        }
+        FormOr(lhs, rhs): {
+            "(" + Form2string(lhs) + " | " + Form2string(rhs) + ")";
+        }
+        FormNot(p): {
+            "!" + Form2string(p);
+        }
+    }
+}
+
+
 /*
 
 standartizeNNF_helper(psi: NNF, renamings: ref Tree<string, string>) -> NNF {
@@ -91,10 +126,10 @@ standartizeNNF(phi: NNF) -> Pair<NNF, Tree<string, string>> {
 
 
 main() {
-    s = "less(x,)";
+    s = "Ax (less(plus(x, y), y) -> more(y, x))";
     s2 = "Ay P()";
     e = parsic(grammar, s, defaultPegActions);
-    println(e);
+    println(Form2string(e));
     println("");
     // println(toNNF(e));
     e2 = parsic(grammar, s2, defaultPegActions);

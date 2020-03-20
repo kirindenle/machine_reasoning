@@ -10,7 +10,7 @@ ex = ' '* "E" ' '* symb$x ' ' form:f ' '* { FormEx($x, :f) };
 
 pred = ' '* symb$p ' '* "(" term*:as ")" ' '* { FormAtom($p, :as) };
 
-term = var | func;
+term = func | var;
 var = symb$x ' '* ","? ' '* { PredVar($x) };
 func = symb$f ' '* "(" term*:as ")" ' '* ","? ' '* { PredFunc($f, :as) };
 
