@@ -5,17 +5,17 @@ or = "(" form:lhs "|" form:rhs ")" { FormOr(:lhs, :rhs) };
 not = "!" form:f { FormNot(:f) };
 arr = "(" form:from "->" form:to ")" { FormOr(FormNot(:from), :to) };
 
-all = "A" ' '* symb$x ' ' form:f { FormAll($x, :f) };
-ex = "E" ' '* symb$x ' ' form:f { FormAll($x, :f) };
+all = ' '* "A" ' '* symb$x ' ' form:f ' '* { FormAll($x, :f) };
+ex = ' '* "E" ' '* symb$x ' ' form:f ' '* { FormEx($x, :f) };
 
 pred = ' '* symb$p ' '* args:as ' '* { FormAtom($p, :as) };
 args = "(" ' '* term:t ' '* rest:r { Cons(:t, :r) };
 
 term = var | func;
-var = symb$x ' '* { PredVar($x) };
-func = symb$f ' '* args:as { PredFunc($f, :as) };
+var = symb$x ' '* { PredVarList($x) };
+func = symb$f ' '* args:as { PredFuncList($f, :as) };
 
 rest = end | cont;
-end = ")" ' '* { EmptyList() };
+end = ")" { EmptyList() };
 cont = "," ' '* term:t ' '* rest:r ' '* { Cons(:t, :r) };
 symb = ('a'-'z' | 'A'-'Z')+;

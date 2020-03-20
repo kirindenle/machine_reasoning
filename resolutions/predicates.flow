@@ -3,25 +3,84 @@ import ds/list;
 import ds/array;
 import lingo/pegcode/driver;
 
-grammar = compilePegGrammar("#include my_array_parser.lingo");
+grammar = compilePegGrammar("#include predicates.lingo");
 
-PredTerm ::= PredVar, PredFunc;
-    PredVar(x: string);
-    PredFunc(name: string, args: List<PredTerm>);
+PredTermList ::= PredVarList, PredFuncList;
+    PredVarList(x: string);
+    PredFuncList(name: string, args: List<PredTerm>);
 
 Form ::= FormAtom, FormAll, FormEx, FormAnd, FormOr, FormNot;
-    FormAtom(name: string, args: List<PredTerm>);
+    FormAtom(name: string, args: List<PredTermList>);
     FormAll(var: string, p: Form);
     FormEx(var: string, p: Form);
     FormAnd(lhs: Form, rhs: Form);
     FormOr(lhs: Form, rhs: Form);
     FormNot(p: Form);
 
+PredTerm ::= PredVar, PredFunc;
+    PredVar(x: string);
+    PredFunc(name: string, args: [PredTerm]);
+
+NNF ::= NNFLiteral, NNFAll, NNFEx, NNFAnd, NNFOr;
+    NNFLiteral(sign: bool, name: string, args: [PredTerm]);
+    NNFAll(var: string, p: NNF);
+    NNFEx(var: string, p: NNF);
+    NNFAnd(lhs: NNF, rhs: NNF);
+    NNFOr(lhs: NNF, rhs: NNF);
+
+toNNF(phi: Form) -> NNF {
+    predlist2predarray = \args -> reverseA(list2array(mapList(args, \p -> switch(p) {
+        PredFuncList(f, as): PredFunc(f, reverseA(list2array(as)));
+        PredVarList(x): PredVar(x);
+    })));
+    switch(phi) {
+        FormNot(psi): {
+            switch(psi) {
+                FormNot(p): {
+                    toNNF(p);
+                }
+                FormAtom(name, args): {
+                    NNFLiteral(false, name, predlist2predarray(args));
+                }
+                FormAll(var, p): {
+                    NNFEx(var, toNNF(FormNot(p)));
+                }
+                FormEx(var, p): {
+                    NNFAll(var, toNNF(FormNot(p)));
+                }
+                FormAnd(lhs, rhs): {
+                    NNFOr(toNNF(FormNot(lhs)), toNNF(FormNot(rhs)));
+                }
+                FormOr(lhs, rhs): {
+                    NNFAnd(toNNF(FormNot(lhs)), toNNF(FormNot(rhs)));
+                }
+            }
+        }
+        FormAtom(name, args): {
+            NNFLiteral(true, name, predlist2predarray(args));
+        }
+        FormAll(var, p): {
+            NNFAll(var, toNNF(p));
+        }
+        FormEx(var, p): {
+            NNFEx(var, toNNF(p));
+        }
+        FormAnd(lhs, rhs): {
+            NNFAnd(toNNF(lhs), toNNF(rhs));
+        }
+        FormOr(lhs, rhs): {
+            NNFOr(toNNF(lhs), toNNF(rhs));
+        }
+    }
+}
+
 main() {
-    s = "Ax Ay Ez (less(x, y) -> more(y, x))";
+    s = "Ax Ay !Ez (less(x, y) | more(y, x))";
     s2 = "Ay P(y)";
     e = parsic(grammar, s, defaultPegActions);
     println(e);
+    println("");
+    println(toNNF(e));
     e2 = parsic(grammar, s2, defaultPegActions);
     println(e2);
 }
