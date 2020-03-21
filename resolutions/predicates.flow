@@ -298,7 +298,7 @@ PNF2SNF(pnf: PrenexNormalForm) -> SkolemNormalForm {
 }
 
 SNF2string(snf: SkolemNormalForm) -> string {
-    "A" + strGlue(map(snf.As, \x -> x), ", ") + ": " + CNF2string(snf.p);
+    "A" + strGlue(snf.As, ", ") + ": " + CNF2string(snf.p);
 }
 
 
