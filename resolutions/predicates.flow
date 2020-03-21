@@ -120,30 +120,27 @@ substNNF(psi: NNF, v: string, new_name: string) {
     }
 }
 
-var_names_helper = ref 0;
-standartizeNNFhelper(psi: NNF) -> NNF {
+standartizeNNFhelper(psi: NNF, counter: ref int) -> NNF {
     switch(psi) {
         NNFAll(x, p): {
-            new_name = "_x" + i2s(^var_names_helper);
-            var_names_helper := ^var_names_helper + 1;
-            NNFAll(new_name, standartizeNNFhelper(substNNF(p, x, new_name)));
+            new_name = "_x" + i2s(^counter);
+            counter := ^counter + 1;
+            NNFAll(new_name, standartizeNNFhelper(substNNF(p, x, new_name), counter));
         }
         NNFEx(x, p): {
-            new_name = "_x" + i2s(^var_names_helper);
-            var_names_helper := ^var_names_helper + 1;
-            NNFEx(new_name, standartizeNNFhelper(substNNF(p, x, new_name)));
+            new_name = "_x" + i2s(^counter);
+            counter := ^counter + 1;
+            NNFEx(new_name, standartizeNNFhelper(substNNF(p, x, new_name), counter));
         }
         Literal(s, p): psi;
-        NNFAnd(l, r): NNFAnd(standartizeNNFhelper(l), standartizeNNFhelper(r));
-        NNFOr(l, r): NNFOr(standartizeNNFhelper(l), standartizeNNFhelper(r));
+        NNFAnd(l, r): NNFAnd(standartizeNNFhelper(l, counter), standartizeNNFhelper(r, counter));
+        NNFOr(l, r): NNFOr(standartizeNNFhelper(l, counter), standartizeNNFhelper(r, counter));
     }
 }
 
 standartizeNNF(psi: NNF) -> NNF {
-    var_names_helper := 0;
-    res = standartizeNNFhelper(psi);
-    var_names_helper := 0;
-    res;
+    counter = ref 0;
+    standartizeNNFhelper(psi, counter);
 }
 
 Quantifier ::= All, Exists;
