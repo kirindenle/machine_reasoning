@@ -263,14 +263,52 @@ Form2PNF(f: Form) -> PrenexNormalForm {
     PF2PNF(shiftAE(standartizeNNF(toNNF(f))));
 }
 
+SkolemNormalForm(As: [string], p: [Tree<Atom, bool>]);
+
+substPred2Atom(a: Atom, x: string, new_term: PredTerm) {
+    Atom(a.name, map(a.args, \pt -> substPredTerm(pt, x, new_term)));
+}
+
+substPred2Dis(dis: Tree<Atom, bool>, x: string, new_term: PredTerm) -> Tree<Atom, bool> {
+    foldTree(dis, TreeEmpty(), \a, s, acc -> {
+        setTree(acc, substPred2Atom(a, x, new_term), s);
+    });
+}
+
+strings2Func(ss: [string], fun_names_helper: ref int) -> PredFunc {
+    f = "_f" + i2s(^fun_names_helper);
+    fun_names_helper := ^fun_names_helper + 1;
+    PredFunc(f, map(ss, \s -> PredVar(s)));
+}
+
+PNF2SNF(pnf: PrenexNormalForm) -> SkolemNormalForm {
+    fun_names_helper = ref -1;
+    fold(pnf.qs, SkolemNormalForm([], pnf.p), \acc, qv -> {
+        switch(qv.q) {
+            All(): SkolemNormalForm(arrayPush(acc.As, qv.x), acc.p);
+            Exists(): {
+                fun_names_helper := ^fun_names_helper + 1;
+                SkolemNormalForm(acc.As, map(acc.p, \dis -> 
+                    substPred2Dis(dis, qv.x, 
+                        PredFunc("_f" + i2s(^fun_names_helper), 
+                            map(acc.As, \s -> PredVar(s))))));
+            }
+        }
+    });
+}
+
+SNF2string(snf: SkolemNormalForm) -> string {
+    "A" + strGlue(map(snf.As, \x -> x), ", ") + ": " + CNF2string(snf.p);
+}
+
 
 main() {
-    s = "Ex (P(x) & (Ay Q(y) & R(x)))";
+    s = "Ex (P(x) & (Ay Q(y) & Az R(z)))";
     e = parsic(grammar, s, defaultPegActions);
     estand = standartizeNNF(toNNF(e));
     println(Form2string(e));
     println(NNF2string(estand));
     println(PF2string(shiftAE(estand)));
-    println(PNF2string(Form2PNF(e)));
+    println(SNF2string(PNF2SNF(Form2PNF(e))));
     // println(toNNF(e));
 }
