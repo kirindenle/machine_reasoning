@@ -298,14 +298,90 @@ SNF2string(snf: SkolemNormalForm) -> string {
     "A" + strGlue(snf.As, ", ") + ": " + CNF2string(snf.p);
 }
 
+TermPair(l: PredTerm, r: PredTerm);
+
+inVars(x: string, t: PredTerm) -> bool {
+    switch(t) {
+        PredVar(tx): x == tx;
+        PredFunc(f, args): fold(args, false, \acc, arg -> acc || inVars(x, arg));
+    }
+}
+
+unifyStep(terms: TermPair) -> Maybe<[TermPair]> {
+    switch(terms.l) {
+        PredVar(xl): switch(terms.r) {
+            PredVar(xr): if (xl == xr) Some([]) else Some([terms]);
+            PredFunc(fr, argsr): if (inVars(xl, terms.r)) None() else Some([terms]);
+        }
+        PredFunc(fl, argsl): switch(terms.r) {
+            PredVar(xr): unifyStep(TermPair(terms.r, terms.l));
+            PredFunc(fr, argsr): 
+                if (fl != fr || length(argsl) != length(argsr)) None() 
+                else Some(zipWith(argsl, argsr, \l, r -> TermPair(l, r)));
+        }
+    }
+}
+
+unify_subst: ref Maybe<Tree<string, PredTerm>> = ref Some(TreeEmpty());
+
+unifyAlg(pairs: [TermPair]) -> Maybe<Tree<string, PredTerm>> {
+    if (isNone(^unify_subst)) {
+        unify_subst := Some(TreeEmpty());
+        None();
+    } 
+    else if (length(pairs) == 0) {
+        res = ^unify_subst;
+        unify_subst := Some(TreeEmpty());
+        res;
+    } else {
+        next = pairs[0];
+        switch(unifyStep(next)) {
+            None(): {
+                unify_subst := Some(TreeEmpty());
+                None();
+            }
+            Some(new_pairs): {
+                if (new_pairs == [next]) {
+                    switch (next.l) {
+                        PredVar(x): {
+                            unify_subst := maybeMap(^unify_subst, \t -> setTree(t, x, next.r));
+                            unifyAlg(filtermapi(pairs, \i, pair -> {
+                                if (i == 0) None() else {
+                                    Some(TermPair(substPredTerm(pair.l, x, next.r), substPredTerm(pair.r, x, next.r)));
+                                }
+                            }));
+                        }
+                        PredFunc(f, as): {
+                            unify_subst := Some(TreeEmpty());
+                            None();
+                        }
+                    };
+                } else {
+                    unifyAlg(concat(new_pairs, tail(pairs)));
+                }
+            }
+        }
+    }
+}
+
+subst2string(msub: Maybe<Tree<string, PredTerm>>) -> string {
+    switch(msub) {
+        None(): "UNUNIFIABLE";
+        Some(sub): {
+            strGlue(convertTreeToArray(sub, \x, t -> x + ": " + PredTerm2string(t)), "\n");
+        }
+    }
+}
 
 main() {
-    s = "Ex (P(x) & (Ay Q(y) & Az R(z)))";
+    s = "Ex Exx Exxx Exxxx Exxxxx Exxxxxx (P(x) & (Ay Q(y) & Az R(z)))";
     e = parsic(grammar, s, defaultPegActions);
     estand = standartizeNNF(toNNF(e));
     println(Form2string(e));
     println(NNF2string(estand));
     println(PF2string(shiftAE(estand)));
     println(SNF2string(PNF2SNF(Form2PNF(e))));
+    println(subst2string(unifyAlg([TermPair(PredFunc("f", [PredVar("x"), PredVar("y")]), 
+        PredFunc("f", [PredVar("z"), PredVar("x")]))])));
     // println(toNNF(e));
 }
