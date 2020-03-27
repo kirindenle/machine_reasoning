@@ -272,14 +272,8 @@ substPred2Dis(dis: Tree<Atom, bool>, x: string, new_term: PredTerm) -> Tree<Atom
     });
 }
 
-strings2Func(ss: [string], fun_names_helper: ref int) -> PredFunc {
-    f = "_f" + i2s(^fun_names_helper);
-    fun_names_helper := ^fun_names_helper + 1;
-    PredFunc(f, map(ss, \s -> PredVar(s)));
-}
-
+fun_names_helper = ref -1;
 PNF2SNF(pnf: PrenexNormalForm) -> SkolemNormalForm {
-    fun_names_helper = ref -1;
     fold(pnf.qs, SkolemNormalForm([], pnf.p), \acc, qv -> {
         switch(qv.q) {
             All(): SkolemNormalForm(arrayPush(acc.As, qv.x), acc.p);
