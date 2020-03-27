@@ -262,13 +262,24 @@ Form2PNF(f: Form) -> PrenexNormalForm {
 
 SkolemNormalForm(As: [string], p: [Tree<Atom, bool>]);
 
-substPred2Atom(a: Atom, x: string, new_term: PredTerm) {
+substPred2Atom(a: Atom, x: string, new_term: PredTerm) -> Atom {
     Atom(a.name, map(a.args, \pt -> substPredTerm(pt, x, new_term)));
 }
 
 substPred2Dis(dis: Tree<Atom, bool>, x: string, new_term: PredTerm) -> Tree<Atom, bool> {
     foldTree(dis, TreeEmpty(), \a, s, acc -> {
-        setTree(acc, substPred2Atom(a, x, new_term), s);
+        a_new = substPred2Atom(a, x, new_term);
+        switch(findInOrder(acc, \a_acc, s_acc -> if (a_acc == a_new) Some(Pair(a_acc, s_acc)) else None())) {
+            None():
+                setTree(acc, a_new, s);
+            Some(p): {
+                if (p.second == s) {
+                    acc;
+                } else {
+                    removeFromTree(acc, a_new);
+                }
+            }
+        };
     });
 }
 
@@ -350,7 +361,7 @@ unifyAlgHelper(pairs: [TermPair], unify_subst: Tree<string, PredTerm>) -> Maybe<
     }
 }
 
-unifyAlg(pairs: [TermPair]) {
+unifyAlg(pairs: [TermPair]) -> Maybe<Tree<string, PredTerm>>{
     unifyAlgHelper(pairs, TreeEmpty());
 }
 
@@ -361,6 +372,25 @@ subst2string(msub: Maybe<Tree<string, PredTerm>>) -> string {
             strGlue(convertTreeToArray(sub, \x, t -> x + ": " + PredTerm2string(t)), "\n");
         }
     }
+}
+
+Form2SNF(p: Form) -> SkolemNormalForm {
+    PNF2SNF(PF2PNF(shiftAE(standartizeNNF(toNNF(p)))));
+}
+
+runResolutions(snf: SkolemNormalForm, start_time: double) -> Maybe<bool> {
+    if (timestamp() - start_time > 10000.0) {
+        None();
+    } else {
+        // ...
+        None();
+    }
+}
+
+implies(axioms : [Form], goal: Form) -> Maybe<bool> {
+    start_time = timestamp();
+    snf = Form2SNF(fold(axioms, FormNot(goal), \x, y -> FormAnd(x, y)));
+    runResolutions(snf, start_time);
 }
 
 main() {
