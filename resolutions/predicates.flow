@@ -322,46 +322,42 @@ unifyStep(terms: TermPair) -> Maybe<[TermPair]> {
     }
 }
 
-unify_subst: ref Maybe<Tree<string, PredTerm>> = ref Some(TreeEmpty());
-
-unifyAlg(pairs: [TermPair]) -> Maybe<Tree<string, PredTerm>> {
-    if (isNone(^unify_subst)) {
-        unify_subst := Some(TreeEmpty());
-        None();
-    } 
-    else if (length(pairs) == 0) {
-        res = ^unify_subst;
-        unify_subst := Some(TreeEmpty());
-        res;
+unifyAlgHelper(pairs: [TermPair], unify_subst: Tree<string, PredTerm>) -> Maybe<Tree<string, PredTerm>> {
+    if (length(pairs) == 0) {
+        Some(unify_subst);
     } else {
         next = pairs[0];
         switch(unifyStep(next)) {
             None(): {
-                unify_subst := Some(TreeEmpty());
                 None();
             }
             Some(new_pairs): {
                 if (new_pairs == [next]) {
                     switch (next.l) {
                         PredVar(x): {
-                            unify_subst := maybeMap(^unify_subst, \t -> setTree(t, x, next.r));
-                            unifyAlg(filtermapi(pairs, \i, pair -> {
-                                if (i == 0) None() else {
-                                    Some(TermPair(substPredTerm(pair.l, x, next.r), substPredTerm(pair.r, x, next.r)));
-                                }
-                            }));
+                            unifyAlgHelper(
+                                filtermapi(pairs,
+                                    \i, pair ->
+                                    if (i == 0) None() else {
+                                        Some(TermPair(substPredTerm(pair.l, x, next.r),
+                                                      substPredTerm(pair.r, x, next.r)));
+                                    }),
+                                setTree(unify_subst, x, next.r));
                         }
                         PredFunc(f, as): {
-                            unify_subst := Some(TreeEmpty());
                             None();
                         }
                     };
                 } else {
-                    unifyAlg(concat(new_pairs, tail(pairs)));
+                    unifyAlgHelper(concat(new_pairs, tail(pairs)), unify_subst);
                 }
             }
         }
     }
+}
+
+unifyAlg(pairs: [TermPair]) {
+    unifyAlgHelper(pairs, TreeEmpty());
 }
 
 subst2string(msub: Maybe<Tree<string, PredTerm>>) -> string {
