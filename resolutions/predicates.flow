@@ -262,25 +262,8 @@ Form2PNF(f: Form) -> PrenexNormalForm {
 
 SkolemNormalForm(As: [string], p: [Tree<Atom, bool>]);
 
-substPred2Atom(a: Atom, x: string, new_term: PredTerm) -> Atom {
+substPred2Atom(a: Atom, x: string, new_term: PredTerm) {
     Atom(a.name, map(a.args, \pt -> substPredTerm(pt, x, new_term)));
-}
-
-substPred2Dis(dis: Tree<Atom, bool>, x: string, new_term: PredTerm) -> Tree<Atom, bool> {
-    foldTree(dis, TreeEmpty(), \a, s, acc -> {
-        a_new = substPred2Atom(a, x, new_term);
-        switch(findInOrder(acc, \a_acc, s_acc -> if (a_acc == a_new) Some(Pair(a_acc, s_acc)) else None())) {
-            None():
-                setTree(acc, a_new, s);
-            Some(p): {
-                if (p.second == s) {
-                    acc;
-                } else {
-                    removeFromTree(acc, a_new);
-                }
-            }
-        };
-    });
 }
 
 fun_names_helper = ref -1;
@@ -290,10 +273,15 @@ PNF2SNF(pnf: PrenexNormalForm) -> SkolemNormalForm {
             All(): SkolemNormalForm(arrayPush(acc.As, qv.x), acc.p);
             Exists(): {
                 fun_names_helper := ^fun_names_helper + 1;
+                new_term = PredFunc(
+                    "_f" + i2s(^fun_names_helper),
+                    map(acc.As, \s -> PredVar(s))
+                );
                 SkolemNormalForm(acc.As, map(acc.p, \dis -> 
-                    substPred2Dis(dis, qv.x, 
-                        PredFunc("_f" + i2s(^fun_names_helper), 
-                            map(acc.As, \s -> PredVar(s))))));
+                    foldTree(dis, TreeEmpty(), \a, s, tmp_tree -> {
+                        setTree(tmp_tree, substPred2Atom(a, qv.x, new_term), s);
+                    }))
+                );                   
             }
         }
     });
@@ -365,6 +353,67 @@ unifyAlg(pairs: [TermPair]) -> Maybe<Tree<string, PredTerm>>{
     unifyAlgHelper(pairs, TreeEmpty());
 }
 
+
+resolve(disj1 : Tree<Atom, bool>, disj2 : Tree<Atom, bool>) -> [Tree<Atom, bool>] {
+    concatA(filtermapTreeToArray(disj1, \a1, s1 -> {
+        Some(filtermapTreeToArray(disj2, \a2, s2 -> {
+            if (a1.name == a2.name && length(a1.args) == length(a2.args) && s1 != s2) {
+                switch (unifyAlg(zipWith(a1.args, a2.args, \l, r -> TermPair(l, r)))) {
+                    None(): None();
+                    Some(subst): {
+                        disj1_without_a1 = removeFromTree(disj1, a1);
+                        disj2_without_a2 = removeFromTree(disj2, a2);
+                        maybe_merged = foldTree(
+                            disj2_without_a2,
+                            Some(disj1_without_a1),
+                            \aa2, ss2, maybe_res -> {
+                                switch(maybe_res) {
+                                    None(): None();
+                                    Some(res): {
+                                        switch(lookupTree(res, aa2)) {
+                                            None(): Some(setTree(res, aa2, ss2));
+                                            Some(ss1): {
+                                                if (ss1 == ss2) maybe_res
+                                                else None();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        );
+                        switch(maybe_merged) {
+                            None(): None();
+                            Some(res_need_subst): {
+                                foldTree(res_need_subst, Some(TreeEmpty()),
+                                    \atom, atom_sign, maybe_disj -> {
+                                        switch(maybe_disj) {
+                                            None(): None();
+                                            Some(tmp_disj): {
+                                                substed_atom = foldTree(subst, atom,
+                                                    \var, new_term, tmp_atom ->
+                                                        substPred2Atom(tmp_atom, var, new_term));
+                                                switch(lookupTree(tmp_disj, substed_atom)) {
+                                                    None(): Some(setTree(tmp_disj, substed_atom, atom_sign));
+                                                    Some(sign_in_res): {
+                                                        if (atom_sign == sign_in_res) maybe_disj
+                                                        else None();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                );
+                            }
+                        }
+                    }
+                }
+            } else {
+                None();
+            }
+        }));
+    }));
+}
+
 subst2string(msub: Maybe<Tree<string, PredTerm>>) -> string {
     switch(msub) {
         None(): "UNUNIFIABLE";
@@ -378,24 +427,33 @@ Form2SNF(p: Form) -> SkolemNormalForm {
     PNF2SNF(PF2PNF(shiftAE(standartizeNNF(toNNF(p)))));
 }
 
+/*
 runResolutions(snf: SkolemNormalForm, start_time: double) -> Maybe<bool> {
-    if (timestamp() - start_time > 10000.0) {
+    if (timestamp() - start_time > 10000) {
         None();
     } else {
         // ...
         None();
     }
-}
+}*/
 
+/*
 implies(axioms : [Form], goal: Form) -> Maybe<bool> {
-    start_time = timestamp();
+    start_time: double = timestamp();
     snf = Form2SNF(fold(axioms, FormNot(goal), \x, y -> FormAnd(x, y)));
     runResolutions(snf, start_time);
 }
+*/
 
 main() {
-    s = "Ex Exx Exxx Exxxx Exxxxx Exxxxxx (P(x) & (Ay Q(y) & Az R(z)))";
+    s = "Ax Ay Az ((P(x) | P(y)) & (!P(y) | !P(z)))";
     e = parsic(grammar, s, defaultPegActions);
+    snf = Form2SNF(e);
+    println(SNF2string(snf));
+    resolve_test = resolve(snf.p[0], snf.p[1]);
+    println(length(resolve_test));
+    mapi(resolve_test, \i, disj -> println(i2s(i) + ": " + CNFEntry2string(disj)));
+    /*
     estand = standartizeNNF(toNNF(e));
     println(Form2string(e));
     println(NNF2string(estand));
@@ -403,5 +461,6 @@ main() {
     println(SNF2string(PNF2SNF(Form2PNF(e))));
     println(subst2string(unifyAlg([TermPair(PredFunc("f", [PredVar("x"), PredVar("y")]), 
         PredFunc("f", [PredVar("z"), PredVar("x")]))])));
+    */
     // println(toNNF(e));
 }
