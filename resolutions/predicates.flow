@@ -10,6 +10,13 @@ PredTerm ::= PredVar, PredFunc;
     PredVar(x: string);
     PredFunc(name: string, args: [PredTerm]);
 
+FolFlatTerm(nodes: [FolFlatNode]);
+FolFlatNode ::= FolFlatVar, FolFlatFunc;
+    FolFlatVar(var: string);
+    FolFlatFunc(fun: string, arity: int, len: int);
+
+flatterm2s(t: FolFlatTerm) -> string {"";}
+
 Atom(name: string, args: [PredTerm]);
 
 Form ::= Atom, FormAll, FormEx, FormAnd, FormOr, FormNot;
@@ -428,25 +435,62 @@ Form2SNF(p: Form) -> SkolemNormalForm {
 }
 
 /*
-runResolutions(snf: SkolemNormalForm, start_time: double) -> Maybe<bool> {
-    if (timestamp() - start_time > 10000) {
-        None();
+DisjPair(l: Tree<Atom, bool>, r: Tree<Atom, bool>);
+
+findNewPair(disjs: [Tree<Atom, bool>], next_l: int, next_r: int, cond : (DisjPair) -> bool) -> Maybe<DisjPair>{
+    p = DisjPair(disjs[next_l], disjs[next_r]);
+    if (cond(p)) p
+    else if (next_r + 1 == length(disjs)) {
+        if (next_l + 1 == length(disjs)) {
+            None();
+        } else {
+            findNewPair(disjs, next_l + 1, next_l + 2, cond);
+        }
     } else {
-        // ...
-        None();
+        findNewPair(disjs, next_l, next_r + 1, cond);
     }
 }*/
 
-/*
+runResolutions(disjs: [Tree<Atom, bool>], seen_disjs: [Tree<Atom, bool>], start_time: double) -> Maybe<bool> {
+    if (timestamp() - start_time > 10000.0) {
+        println("runResolutions: too long");
+        None();
+    } else if (length(disjs) <= 1){
+        Some(false);
+    } else {
+        maybe_next_pair = foldi(disjs, None(), \i, maybe_res, dis_i -> switch(maybe_res) {
+            Some(res): maybe_res;
+            None(): foldi(disjs, None(), \j, maybe_res2, dis_j -> switch(maybe_res2) {
+                Some(res): maybe_res2;
+                None(): {
+                    if (i >= j) None()
+                    else if (exists(seen_disjs, \t -> equalTrees(dis_i, t))
+                             && exists(seen_disjs, \t -> equalTrees(dis_j, t))) None()
+                    else Some(Pair(i, j))
+                }
+            });
+        });
+        switch(maybe_next_pair) {
+            None(): Some(false);
+            Some(p): {
+                i = p.first;
+                j = p.second;
+                None();
+            }
+        }
+    }
+}
+
+
 implies(axioms : [Form], goal: Form) -> Maybe<bool> {
     start_time: double = timestamp();
     snf = Form2SNF(fold(axioms, FormNot(goal), \x, y -> FormAnd(x, y)));
-    runResolutions(snf, start_time);
+    runResolutions(snf.p, [], start_time);
 }
-*/
+
 
 main() {
-    s = "Ax Ay Az ((P(x) | P(y)) & (!P(y) | !P(z)))";
+    s = "Ax Ay Az ((P(x) | P(y)) & (!P(y) | P(x)))";
     e = parsic(grammar, s, defaultPegActions);
     snf = Form2SNF(e);
     println(SNF2string(snf));
